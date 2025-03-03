@@ -14,6 +14,9 @@ export NCCL_SOCKET_IFNAME=ib0       # 使用InfiniBand
 export NCCL_IB_DISABLE=0
 export NCCL_IB_HCA=mlx5_0:1         # 指定Mellanox网卡
 
+source ~/miniconda3/bin/activate
+conda activate 
+
 # 自动获取主节点IP
 export MASTER_ADDR=$(scontrol show hostname $SLURM_JOB_NODELIST | head -n1)
 export MASTER_PORT=29500
