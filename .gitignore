@@ -55,3 +55,13 @@ site/
 /wandb/
 /scratch/
 core
+
+# data files
+*.gz
+*.safetensors
+*.pytest_cache
+*.log
+*.pt
+*.npy
+*.wandb
+OLMo2-7B-pre-stage1
