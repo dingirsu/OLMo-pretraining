@@ -51,7 +51,7 @@ from olmo.util import (
 log = logging.getLogger("train")
 
 
-def main(cfg: TrainConfig) -> None:
+def main(cfg: TrainConfig, local_rank: int) -> None:
     # Ensure run name set.
     if cfg.run_name is None:
         raise OLMoConfigurationError("--run_name is required")
@@ -73,6 +73,9 @@ def main(cfg: TrainConfig) -> None:
     #     device = torch.device("cuda")
     # else:
     #     raise NotImplementedError("Only CUDA is supported at the moment.")
+    torch.cuda.set_device(local_rank)
+    torch.cuda.empty_cache()
+    device = torch.device("cuda")
 
     # Fill some configuration options.
     cfg.model.precision = cfg.precision
@@ -144,8 +147,9 @@ def main(cfg: TrainConfig) -> None:
     if cfg.compile is not None:
         if cfg.model.block_group_size != 1:
             raise OLMoConfigurationError("Compile is only supported with block_group_size 1.")
-        for block in olmo_model.transformer.blocks:
-            block.compile(**cfg.compile.asdict())
+        with torch.no_grad():
+            for block in olmo_model.transformer.blocks:
+                block.compile(**cfg.compile.asdict())
 
     olmo_model.set_activation_checkpointing(cfg.activation_checkpointing)
 
@@ -378,19 +382,22 @@ def main(cfg: TrainConfig) -> None:
 
 
 if __name__ == "__main__":
-    rank = int(os.environ['SLURM_PROCID'])
-    local_rank = int(os.environ['SLURM_LOCALID'])
-    world_size = int(os.environ['WORLD_SIZE'])
-    dist.init_process_group(
-        backend='nccl',
-        init_method='env://',
-        world_size=world_size,
-        rank=rank
-    )
-    torch.cuda.set_device(local_rank)
-    # dist.init_process_group("nccl", "env://")
-    # # torch.cuda.set_device(f"cuda:{get_local_rank()}")
-    # torch.cuda.set_device(dist.get_rank())
+    try:
+        rank = int(os.environ['SLURM_PROCID'])
+        local_rank = int(os.environ['SLURM_LOCALID'])
+        world_size = int(os.environ['WORLD_SIZE'])
+        dist.init_process_group(
+            backend='nccl',
+            init_method='env://',
+            world_size=world_size,
+            rank=rank
+        )
+        torch.cuda.set_device(local_rank)
+    except:
+        dist.init_process_group("nccl", "env://")
+        # torch.cuda.set_device(f"cuda:{get_local_rank()}")
+        torch.cuda.set_device(dist.get_rank())
+        local_rank = dist.get_rank()
     # Initialize process group.
     # device_as_string = f"cuda:{get_local_rank()}"
     # torch.cuda.set_device(
@@ -458,4 +465,4 @@ if __name__ == "__main__":
             exit(-1)
     if dist.get_rank() == 0:
         Path(cfg.save_folder).mkdir(parents=True)
-    main(cfg)
+    main(cfg, local_rank)
