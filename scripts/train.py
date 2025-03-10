@@ -394,46 +394,12 @@ if __name__ == "__main__":
         )
         torch.cuda.set_device(local_rank)
     except:
-        dist.init_process_group("nccl", "env://")
-        # torch.cuda.set_device(f"cuda:{get_local_rank()}")
-        torch.cuda.set_device(dist.get_rank())
-        local_rank = dist.get_rank()
-    # Initialize process group.
-    # device_as_string = f"cuda:{get_local_rank()}"
-    # torch.cuda.set_device(
-    #     device_as_string
-    # )  # Set this early to prevent GPU 0 from picking up a bunch of tensors it shouldn't have.
-    # dist.init_process_group(
-    #     backend="nccl", timeout=timedelta(minutes=30), device_id=torch.device(device_as_string)
-    # )
+        dist.init_process_group("nccl", "env://", world_size=get_world_size(), rank=get_global_rank())
+        torch.cuda.set_device(get_local_rank())
+        local_rank = get_local_rank()
+    
     log.info("Use CUDA")
-    # if torch.cuda.is_available():
-    #     # Set CUDA device.
-    #     torch.cuda.set_device(f"cuda:{get_local_rank()}")
-
-    #     # Initialize process group.
-    #     device_as_string = f"cuda:{get_local_rank()}"
-    #     torch.cuda.set_device(
-    #         device_as_string
-    #     )  # Set this early to prevent GPU 0 from picking up a bunch of tensors it shouldn't have.
-    #     dist.init_process_group(
-    #         backend="nccl", timeout=timedelta(minutes=30), device_id=torch.device(device_as_string)
-    #     )
-    #     log.info("Use CUDA")
-    # elif torch.backends.mps.is_available():
-    #     if not os.getenv("RANK"):
-    #         os.environ["RANK"] = "0"
-    #     if not os.getenv("WORLD_SIZE"):
-    #         os.environ["WORLD_SIZE"] = "1"
-    #     if not os.getenv("MASTER_ADDR"):
-    #         os.environ["MASTER_ADDR"] = "0.0.0.0"
-    #     if not os.getenv("MASTER_PORT"):
-    #         os.environ["MASTER_PORT"] = "24501"
-    #     dist.init_process_group(backend="gloo", timeout=timedelta(minutes=30))
-
-    # else:
-    #     dist.init_process_group(backend="gloo", timeout=timedelta(minutes=30))
-
+    
     log.info("Process group initialized")
 
     prepare_cli_environment()
@@ -447,15 +413,7 @@ if __name__ == "__main__":
         raise OLMoCliError(f"Usage: {sys.argv[0]} [CONFIG_PATH] [OPTIONS]")
 
     cfg = TrainConfig.load(yaml_path, [clean_opt(s) for s in args_list])
-    # if torch.device("mps"):
-    #     log.info("Device is MPS. Updating config...")
-    #     cfg.model.init_device = "mps"
-    #     cfg.distributed_strategy = "single"  # type: ignore
-
-    # if torch.device("cpu"):
-    #     log.info("Device is CPU. Updating config...")
-    #     cfg.model.init_device = "cpu"
-    #     cfg.distributed_strategy = "single"  # type: ignore
+    
     if dist.get_rank() == 0 and os.path.exists(cfg.save_folder):
         if cfg.save_overwrite:
             import shutil
