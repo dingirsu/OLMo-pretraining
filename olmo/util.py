@@ -366,28 +366,56 @@ def upload(source: PathOrStr, target: str, save_overwrite: bool = False):
 
 
 def get_bytes_range(source: PathOrStr, bytes_start: int, num_bytes: int) -> bytes:
-    if is_url(source):
-        from urllib.parse import urlparse
+    # if is_url(source):
+    #     from urllib.parse import urlparse
 
-        parsed = urlparse(str(source))
-        if parsed.scheme == "gs":
-            return _gcs_get_bytes_range(parsed.netloc, parsed.path.strip("/"), bytes_start, num_bytes)
-        elif parsed.scheme in ("s3", "r2", "weka"):
-            return _s3_get_bytes_range(
-                parsed.scheme, parsed.netloc, parsed.path.strip("/"), bytes_start, num_bytes
-            )
-        elif parsed.scheme in ("http", "https"):
-            return _http_get_bytes_range(
-                parsed.scheme, parsed.netloc, parsed.path.strip("/"), bytes_start, num_bytes
-            )
-        elif parsed.scheme == "file":
-            return get_bytes_range(str(source).replace("file://", "", 1), bytes_start, num_bytes)
-        else:
-            raise NotImplementedError(f"get bytes range not implemented for '{parsed.scheme}' files")
-    else:
+    #     parsed = urlparse(str(source))
+    #     if parsed.scheme == "gs":
+    #         return _gcs_get_bytes_range(parsed.netloc, parsed.path.strip("/"), bytes_start, num_bytes)
+    #     elif parsed.scheme in ("s3", "r2", "weka"):
+    #         return _s3_get_bytes_range(
+    #             parsed.scheme, parsed.netloc, parsed.path.strip("/"), bytes_start, num_bytes
+    #         )
+    #     elif parsed.scheme in ("http", "https"):
+    #         return _http_get_bytes_range(
+    #             parsed.scheme, parsed.netloc, parsed.path.strip("/"), bytes_start, num_bytes
+    #         )
+    #     elif parsed.scheme == "file":
+    #         return get_bytes_range(str(source).replace("file://", "", 1), bytes_start, num_bytes)
+    #     else:
+    #         raise NotImplementedError(f"get bytes range not implemented for '{parsed.scheme}' files")
+    # else:
+    #     with open(source, "rb") as f:
+    #         f.seek(bytes_start)
+    #         return f.read(num_bytes)
+    try:
         with open(source, "rb") as f:
             f.seek(bytes_start)
             return f.read(num_bytes)
+    except:
+        from urllib.parse import urlparse
+
+        url = str(source)
+        parsed = urlparse(url)
+        path = parsed.path.lstrip('/')
+        local_path = os.path.join("/ssd/data/weijia/olmo-data", path)
+        
+        # 创建目标目录
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            
+        # 下载文件
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+        
+        # 写入文件
+        with open(local_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+        with open(source, "rb") as f:
+            f.seek(bytes_start)
+            return f.read(num_bytes)
+
 
 
 def find_latest_checkpoint(dir: PathOrStr) -> Optional[PathOrStr]:

@@ -1,56 +1,69 @@
-import argparse
 import os
 import requests
-import concurrent
-from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 
-def download_file(url, output_dir, retries=3, timeout=10):
-    """下载单个文件并保存到指定目录"""
+def download_file(url, base_dir="/ssd/data/weijia/olmo/data", retries=3):
+    """下载单个文件并保持目录结构"""
     try:
-        filename = os.path.basename(urlparse(url).path)
-        save_path = os.path.join(output_dir, filename)
+        parsed = urlparse(url)
+        path = parsed.path.lstrip('/')
+        local_path = os.path.join(base_dir, path)
         
-        for attempt in range(retries):
-            try:
-                with requests.get(url, stream=True, timeout=timeout) as r:
-                    r.raise_for_status()
-                    with open(save_path, 'wb') as f:
-                        for chunk in r.iter_content(chunk_size=8192):
-                            f.write(chunk)
-                print(f"Downloaded: {filename}")
-                return True
-            except Exception as e:
-                print(f"Attempt {attempt + 1} failed for {filename}: {str(e)}")
-                if attempt == retries - 1:
-                    print(f"Failed to download {filename} after {retries} attempts")
-                    return False
+        # 创建目标目录
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        
+        # 如果文件已存在则跳过
+        if os.path.exists(local_path):
+            return True, url, "Already exists"
+            
+        # 下载文件
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+        
+        # 写入文件
+        with open(local_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+        return True, url, "Success"
+        
     except Exception as e:
-        print(f"Error processing {url}: {str(e)}")
-        return False
+        if retries > 0:
+            return download_file(url, base_dir, retries-1)
+        return False, url, str(e)
 
-def main():
-    parser = argparse.ArgumentParser(description='olmo2 traning data downloader')
-    parser.add_argument('-i', '--input', required=True, help='urls')
-    parser.add_argument('-o', '--output', default='downloads')
-    parser.add_argument('-t', '--threads', type=int, default=20)
-    
-    args = parser.parse_args()
-
-    # 创建输出目录
-    os.makedirs(args.output, exist_ok=True)
-
-    # 读取URL列表
-    with open(args.input) as f:
+def batch_download(urls_file, max_workers=20):
+    """批量下载"""
+    with open(urls_file) as f:
         urls = [line.strip() for line in f if line.strip()]
-
-    # 使用线程池下载
-    with ThreadPoolExecutor(max_workers=args.threads) as executor:
-        futures = [executor.submit(download_file, url, args.output) for url in urls]
         
-        # 等待所有任务完成
-        for future in concurrent.futures.as_completed(futures):
-            future.result()
+    print(f"Total files to download: {len(urls)}")
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(download_file, url): url for url in urls}
+        
+        successes = 0
+        errors = []
+        
+        # 使用tqdm显示进度条
+        with tqdm(total=len(urls), desc="Downloading") as pbar:
+            for future in as_completed(futures):
+                success, url, msg = future.result()
+                if success:
+                    successes += 1
+                else:
+                    errors.append((url, msg))
+                pbar.update(1)
+                
+        print(f"\nDownload complete. Success: {successes}/{len(urls)}")
+        if errors:
+            print("\nFailed downloads:")
+            for url, error in errors[:10]:  # 最多显示10个错误
+                print(f"{url} - {error}")
 
 if __name__ == "__main__":
-    main()
+    # 使用说明
+    urls_file = "data_urls.txt"  # 包含所有下载链接的文本文件
+    batch_download(urls_file)

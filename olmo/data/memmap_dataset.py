@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-
+import torch.distributed as dist
 from olmo.exceptions import OLMoEnvironmentError
 
 from ..aliases import PathOrStr

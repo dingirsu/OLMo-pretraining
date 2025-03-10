@@ -65,14 +65,7 @@ def main(cfg: TrainConfig, local_rank: int) -> None:
         )
 
     barrier()
-
-    # Set CUDA device.
-    # if torch.cuda.is_available():
-    #     torch.cuda.set_device(dist.get_rank())
-    #     torch.cuda.empty_cache()
-    #     device = torch.device("cuda")
-    # else:
-    #     raise NotImplementedError("Only CUDA is supported at the moment.")
+    
     torch.cuda.set_device(local_rank)
     torch.cuda.empty_cache()
     device = torch.device("cuda")
@@ -394,9 +387,9 @@ if __name__ == "__main__":
         )
         torch.cuda.set_device(local_rank)
     except:
-        dist.init_process_group("nccl", "env://", world_size=get_world_size(), rank=get_global_rank())
-        torch.cuda.set_device(get_local_rank())
-        local_rank = get_local_rank()
+        dist.init_process_group("nccl", "env://")
+        torch.cuda.set_device(dist.get_rank())
+        local_rank = dist.get_rank()
     
     log.info("Use CUDA")
     
